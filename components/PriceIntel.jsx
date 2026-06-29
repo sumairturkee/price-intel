@@ -265,9 +265,12 @@ export default function PriceIntel() {
   const [addRowModel,setAddRowModel] = useState('');
   const [addRowVariant,setAddRowVariant] = useState('');
   const [addRowMyPrice,setAddRowMyPrice] = useState('');
+  const [snapshots,setSnapshots]     = useState([]);
+  const [viewingSnap,setViewingSnap] = useState(null);
+  const [snapLoading,setSnapLoading] = useState(false);
   const fileRef = useRef(null);
 
-  useEffect(()=>{ loadAll(); const u=setupRealtime(); return ()=>u(); },[]);
+  useEffect(()=>{ loadAll(); loadSnapshots(); const u=setupRealtime(); return ()=>u(); },[]);
 
   async function loadAll(){
     setLoading(true);
@@ -287,6 +290,44 @@ export default function PriceIntel() {
       }
       if(or.data) setOverrides(or.data);
     } finally { setLoading(false); }
+  }
+
+  async function loadSnapshots(){
+    const {data} = await supabase.from('snapshots').select('id,date,label,created_at').order('date',{ascending:false});
+    if(data) setSnapshots(data);
+  }
+
+  async function saveSnapshot(){
+    const dateStr=new Date().toISOString().slice(0,10);
+    const label=`Snapshot ${dateStr}`;
+    // Build payload from current live data
+    const payload={
+      myList,
+      competitors:competitors.map(c=>({name:c.name,items:c.items})),
+      overrides,
+    };
+    const {error} = await supabase.from('snapshots').upsert(
+      {date:dateStr,label,data:JSON.stringify(payload)},
+      {onConflict:'date'}
+    );
+    if(!error){setSyncStatus('saved');setTimeout(()=>setSyncStatus(''),2000);loadSnapshots();}
+    else alert('Snapshot save failed: '+error.message);
+  }
+
+  async function loadSnapshotData(snap){
+    if(!snap){setViewingSnap(null);loadAll();return;}
+    setSnapLoading(true);
+    const {data} = await supabase.from('snapshots').select('data').eq('id',snap.id).single();
+    if(data?.data){
+      try{
+        const parsed=JSON.parse(data.data);
+        if(parsed.myList) setMyList(parsed.myList);
+        if(parsed.competitors) setCompetitors(parsed.competitors.map((c,i)=>({...c,id:i})));
+        if(parsed.overrides) setOverrides(parsed.overrides);
+        setViewingSnap(snap);
+      }catch(e){alert('Failed to load snapshot');}
+    }
+    setSnapLoading(false);
   }
 
   function setupRealtime(){
@@ -448,8 +489,11 @@ export default function PriceIntel() {
     const myPrice=parseInt(addRowMyPrice.replace(/[^0-9]/g,''),10)||0;
     if(!model)return;
     // Use timestamp to guarantee unique key
-    const key='manual_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+    const key='manual|||'+model+'|||'+variant+'|||'+Date.now();
+    // Save the manualRow marker
     await setOv(key,'manualRow',JSON.stringify({key,model,variant,myPrice,compPrices:{}}));
+    // Also save myPrice as a separate override so it reflects immediately and can be edited
+    if(myPrice>0) await setOv(key,'myPrice',myPrice);
     setAddRowModel('');setAddRowVariant('');setAddRowMyPrice('');setAddRowOpen(false);
   }
 
@@ -498,21 +542,44 @@ export default function PriceIntel() {
   return(
     <div style={{minHeight:'100vh',background:C.bg,color:C.text,fontFamily:"'Inter','Segoe UI',sans-serif",fontSize:14,display:'flex',flexDirection:'column'}}>
       {/* Header */}
-      <div style={{borderBottom:`1px solid ${C.border}`,padding:'13px 20px',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
+      <div style={{borderBottom:`1px solid ${C.border}`,padding:'13px 20px',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0,flexWrap:'wrap',gap:8}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
           <span style={{fontSize:22}}>📱</span>
           <span style={{fontWeight:800,fontSize:17,letterSpacing:'-0.02em'}}>Price Intel</span>
           <span style={{color:C.muted,fontWeight:400,fontSize:13}}> — Daily Competitor Tracker</span>
           {syncStatus&&<span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:3,background:syncStatus==='saving'?C.amberDim:C.accentDim,color:syncStatus==='saving'?C.amber:C.accent}}>{syncStatus==='saving'?'⟳ Syncing…':'✓ Synced'}</span>}
+          {viewingSnap&&<span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:3,background:C.redDim,color:C.red}}>📅 Viewing: {viewingSnap.date} (Read-only)</span>}
         </div>
-        {competitors.some(c=>c.items.length>0)&&(
-          <div style={{display:'flex',gap:16,fontSize:12}}>
-            <span style={{color:C.muted}}>My models: <strong style={{color:C.text}}>{stats.mine}</strong></span>
-            <span style={{color:C.red}}>Expensive: <strong>{stats.higher}</strong></span>
-            <span style={{color:C.accent}}>Cheaper: <strong>{stats.lower}</strong></span>
-            {stats.newM>0&&<span style={{color:C.amber}}>New: <strong>{stats.newM}</strong></span>}
+        <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+          {/* Snapshot controls */}
+          <div style={{display:'flex',alignItems:'center',gap:6}}>
+            <select value={viewingSnap?.id||''} onChange={e=>{const s=snapshots.find(s=>String(s.id)===e.target.value);loadSnapshotData(s||null);}}
+              style={{background:C.surface,color:viewingSnap?C.amber:C.textDim,border:`1px solid ${viewingSnap?C.amber:C.border}`,borderRadius:6,padding:'5px 8px',fontSize:12,cursor:'pointer',outline:'none'}}>
+              <option value="">📅 Live Data</option>
+              {snapshots.map(s=><option key={s.id} value={s.id}>{s.date}</option>)}
+            </select>
+            {!viewingSnap&&(
+              <button onClick={saveSnapshot} title="Save today's snapshot"
+                style={{padding:'5px 11px',borderRadius:6,border:`1px solid ${C.border}`,background:C.surface,color:C.accent,fontSize:12,cursor:'pointer',fontWeight:600,whiteSpace:'nowrap'}}>
+                💾 Save Snapshot
+              </button>
+            )}
+            {viewingSnap&&(
+              <button onClick={()=>loadSnapshotData(null)}
+                style={{padding:'5px 11px',borderRadius:6,border:`1px solid ${C.red}`,background:C.redDim,color:C.red,fontSize:12,cursor:'pointer',fontWeight:600}}>
+                ✕ Back to Live
+              </button>
+            )}
           </div>
-        )}
+          {competitors.some(c=>c.items.length>0)&&(
+            <div style={{display:'flex',gap:16,fontSize:12}}>
+              <span style={{color:C.muted}}>My models: <strong style={{color:C.text}}>{stats.mine}</strong></span>
+              <span style={{color:C.red}}>Expensive: <strong>{stats.higher}</strong></span>
+              <span style={{color:C.accent}}>Cheaper: <strong>{stats.lower}</strong></span>
+              {stats.newM>0&&<span style={{color:C.amber}}>New: <strong>{stats.newM}</strong></span>}
+            </div>
+          )}
+        </div>
       </div>
 
       <div style={{display:'flex',flex:1,overflow:'hidden'}}>
