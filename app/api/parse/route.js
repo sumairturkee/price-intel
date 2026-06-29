@@ -36,27 +36,38 @@ Message:
 ${rawText}
 ---`;
 
-    // ── Gemini API (free tier) ────────────────────────────────────────────────
-    const apiKey = process.env.GEMINI_API_KEY;
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+    // ── Groq API (free tier — llama-3.3-70b) ─────────────────────────────────
+    const apiKey = process.env.GROQ_API_KEY;
 
-    const res = await fetch(url, {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.1,        // low temperature = more precise extraction
-          maxOutputTokens: 4000,
-        },
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a precise data extraction assistant. You output only valid JSON arrays, never markdown or explanation.',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        temperature: 0.1,
+        max_tokens: 4000,
       }),
     });
 
     const data = await res.json();
 
-    // Gemini response structure: data.candidates[0].content.parts[0].text
-    if (data.error) throw new Error(data.error.message || 'Gemini API error');
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    if (data.error) throw new Error(data.error.message || 'Groq API error');
+
+    // Groq uses OpenAI-compatible response format
+    const text = data.choices?.[0]?.message?.content || '';
     const clean = text.replace(/```json|```/g, '').trim();
 
     let items;
@@ -69,7 +80,7 @@ ${rawText}
         const partial = m[1].replace(/,\s*$/, '').replace(/,\s*\{[^}]*$/, '') + ']';
         items = JSON.parse(partial);
       } else {
-        throw new Error('Could not parse Gemini response as JSON');
+        throw new Error('Could not parse response as JSON');
       }
     }
 
