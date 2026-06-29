@@ -306,10 +306,20 @@ export default function PriceIntel() {
 
   async function setOv(key,type,value,comp=''){
     setSyncStatus('saving');
-    await supabase.from('overrides').upsert(
-      {row_key:key,type,comp_name:comp||'',value:String(value)},
+    const val = String(value);
+    const compName = comp||'';
+    // Update local state immediately so UI responds without waiting for realtime
+    setOverrides(prev => {
+      const idx = prev.findIndex(o=>o.row_key===key&&o.type===type&&o.comp_name===compName);
+      const newOv = {row_key:key,type,comp_name:compName,value:val,id:idx>=0?prev[idx].id:Date.now()};
+      if(idx>=0){ const next=[...prev]; next[idx]=newOv; return next; }
+      return [...prev, newOv];
+    });
+    const {error} = await supabase.from('overrides').upsert(
+      {row_key:key,type,comp_name:compName,value:val},
       {onConflict:'row_key,type,comp_name'}
     );
+    if(error) console.error('setOv error:', error);
     setSyncStatus('saved'); setTimeout(()=>setSyncStatus(''),2000);
   }
 
@@ -437,7 +447,8 @@ export default function PriceIntel() {
     const variant=addRowVariant.trim();
     const myPrice=parseInt(addRowMyPrice.replace(/[^0-9]/g,''),10)||0;
     if(!model)return;
-    const key='manual|||'+model+'|||'+variant+'|||'+Date.now();
+    // Use timestamp to guarantee unique key
+    const key='manual_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
     await setOv(key,'manualRow',JSON.stringify({key,model,variant,myPrice,compPrices:{}}));
     setAddRowModel('');setAddRowVariant('');setAddRowMyPrice('');setAddRowOpen(false);
   }
