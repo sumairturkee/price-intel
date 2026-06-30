@@ -543,22 +543,69 @@ export default function PriceIntel() {
   return(
     <div style={{minHeight:'100vh',background:C.bg,color:C.text,fontFamily:"'Inter','Segoe UI',sans-serif",fontSize:14,display:'flex',flexDirection:'column'}}>
       {/* Header */}
-      <div style={{borderBottom:`1px solid ${C.border}`,padding:'13px 20px',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
+      <div style={{borderBottom:`1px solid ${C.border}`,padding:'13px 20px',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0,flexWrap:'wrap',gap:10}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <img src="/logo.jpeg" alt="Shri Maa" style={{width:30,height:30,borderRadius:'50%',objectFit:'cover',flexShrink:0}}/>
           <span style={{fontSize:22}}>📱</span>
           <span style={{fontWeight:800,fontSize:17,letterSpacing:'-0.02em'}}>Price Intel</span>
           <span style={{color:C.muted,fontWeight:400,fontSize:13}}> — Daily Competitor Tracker</span>
           {recallDate&&<span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:3,background:C.blueDim,color:C.blue,marginLeft:4}}>📅 {recallDate}</span>}
           {syncStatus&&<span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:3,background:syncStatus==='saving'?C.amberDim:C.accentDim,color:syncStatus==='saving'?C.amber:C.accent}}>{syncStatus==='saving'?'⟳ Syncing…':'✓ Synced'}</span>}
         </div>
-        {competitors.some(c=>c.items.length>0)&&(
-          <div style={{display:'flex',gap:16,fontSize:12}}>
-            <span style={{color:C.muted}}>My models: <strong style={{color:C.text}}>{stats.mine}</strong></span>
-            <span style={{color:C.red}}>Expensive: <strong>{stats.higher}</strong></span>
-            <span style={{color:C.accent}}>Cheaper: <strong>{stats.lower}</strong></span>
-            {stats.newM>0&&<span style={{color:C.amber}}>New: <strong>{stats.newM}</strong></span>}
-          </div>
-        )}
+        <div style={{display:'flex',alignItems:'center',gap:14,flexWrap:'wrap'}}>
+          {/* Save snapshot button */}
+          <button onClick={saveSnapshot} disabled={saveStatus==='saving'} style={{
+            display:'flex',alignItems:'center',gap:6,padding:'7px 14px',borderRadius:6,border:'none',
+            background:saveStatus==='saved'?C.accent:saveStatus==='error'?C.red:C.surface2,
+            color:saveStatus==='saved'?'#000':saveStatus==='error'?'#fff':C.textDim,
+            fontWeight:700,fontSize:12,cursor:'pointer',whiteSpace:'nowrap',
+            border:`1px solid ${saveStatus==='saved'?C.accent:saveStatus==='error'?C.red:C.border}`,
+          }}>
+            {saveStatus==='saving'?'Saving…':saveStatus==='saved'?'✓ Saved!':saveStatus==='error'?'✗ Error':'💾 Save'}
+          </button>
+
+          {/* Recall dropdown */}
+          {savedDates.length>0&&(
+            <div style={{position:'relative'}}>
+              <button onClick={()=>setSessionDropOpen(o=>!o)} style={{
+                display:'flex',alignItems:'center',gap:6,padding:'7px 14px',borderRadius:6,
+                background:recallDate?C.blueDim:C.surface2,color:recallDate?C.blue:C.textDim,
+                border:`1px solid ${recallDate?C.blue+'55':C.border}`,fontWeight:recallDate?700:400,fontSize:12,
+                cursor:'pointer',whiteSpace:'nowrap',
+              }}>
+                {recallDate?`📅 ${recallDate}`:'📅 Recall'}
+                <span style={{fontSize:9,color:C.muted}}>▼</span>
+                {recallDate&&<span onClick={e=>{e.stopPropagation();setRecallDate('');loadAll();}} style={{color:C.muted,fontSize:12}}>✕</span>}
+              </button>
+              {sessionDropOpen&&(
+                <>
+                  <div onClick={()=>setSessionDropOpen(false)} style={{position:'fixed',inset:0,zIndex:99}}/>
+                  <div style={{position:'absolute',top:'calc(100% + 4px)',right:0,zIndex:100,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 8px 24px #0008',minWidth:200,maxHeight:320,overflowY:'auto',padding:'6px 0'}}>
+                    <div style={{padding:'6px 14px 8px',borderBottom:`1px solid ${C.border}`,fontSize:11,color:C.muted,fontWeight:700,letterSpacing:'0.06em',textTransform:'uppercase'}}>Saved Dates</div>
+                    {savedDates.map(d=>(
+                      <div key={d} onClick={()=>recallSnapshot(d)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'9px 14px',cursor:'pointer',fontSize:13,color:d===recallDate?C.blue:C.textDim,background:d===recallDate?C.blueDim:'transparent'}}
+                        onMouseEnter={e=>{if(d!==recallDate)e.currentTarget.style.background=C.border;}}
+                        onMouseLeave={e=>{if(d!==recallDate)e.currentTarget.style.background='transparent';}}>
+                        <span>📅 {d}</span>
+                        <span onClick={e=>deleteSnapshot(d,e)} style={{color:C.muted,fontSize:13,padding:'2px 5px'}}
+                          onMouseEnter={e=>e.currentTarget.style.color=C.red} onMouseLeave={e=>e.currentTarget.style.color=C.muted}>🗑</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {competitors.some(c=>c.items.length>0)&&(
+            <div style={{display:'flex',gap:16,fontSize:12}}>
+              <span style={{color:C.muted}}>My models: <strong style={{color:C.text}}>{stats.mine}</strong></span>
+              <span style={{color:C.red}}>Expensive: <strong>{stats.higher}</strong></span>
+              <span style={{color:C.accent}}>Cheaper: <strong>{stats.lower}</strong></span>
+              {stats.newM>0&&<span style={{color:C.amber}}>New: <strong>{stats.newM}</strong></span>}
+            </div>
+          )}
+        </div>
       </div>
 
       <div style={{display:'flex',flex:1,overflow:'hidden'}}>
@@ -684,50 +731,6 @@ export default function PriceIntel() {
                       </button>
                     ))}
                     <span style={{flex:1}}/>
-
-                    {/* Save snapshot button */}
-                    <button onClick={saveSnapshot} disabled={saveStatus==='saving'} style={{
-                      display:'flex',alignItems:'center',gap:6,padding:'8px 14px',borderRadius:6,border:'none',
-                      background:saveStatus==='saved'?C.accent:saveStatus==='error'?C.red:C.surface2,
-                      color:saveStatus==='saved'?'#000':saveStatus==='error'?'#fff':C.textDim,
-                      fontWeight:700,fontSize:12,cursor:'pointer',whiteSpace:'nowrap',
-                      border:`1px solid ${saveStatus==='saved'?C.accent:saveStatus==='error'?C.red:C.border}`,
-                    }}>
-                      {saveStatus==='saving'?'Saving…':saveStatus==='saved'?'✓ Saved!':saveStatus==='error'?'✗ Error':'💾 Save'}
-                    </button>
-
-                    {/* Recall dropdown */}
-                    {savedDates.length>0&&(
-                      <div style={{position:'relative'}}>
-                        <button onClick={()=>setSessionDropOpen(o=>!o)} style={{
-                          display:'flex',alignItems:'center',gap:6,padding:'8px 14px',borderRadius:6,
-                          background:recallDate?C.blueDim:C.surface2,color:recallDate?C.blue:C.textDim,
-                          border:`1px solid ${recallDate?C.blue+'55':C.border}`,fontWeight:recallDate?700:400,fontSize:12,
-                          cursor:'pointer',whiteSpace:'nowrap',
-                        }}>
-                          {recallDate?`📅 ${recallDate}`:'📅 Recall'}
-                          <span style={{fontSize:9,color:C.muted}}>▼</span>
-                          {recallDate&&<span onClick={e=>{e.stopPropagation();setRecallDate('');loadAll();}} style={{color:C.muted,fontSize:12}}>✕</span>}
-                        </button>
-                        {sessionDropOpen&&(
-                          <>
-                            <div onClick={()=>setSessionDropOpen(false)} style={{position:'fixed',inset:0,zIndex:99}}/>
-                            <div style={{position:'absolute',top:'calc(100% + 4px)',right:0,zIndex:100,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 8px 24px #0008',minWidth:200,maxHeight:320,overflowY:'auto',padding:'6px 0'}}>
-                              <div style={{padding:'6px 14px 8px',borderBottom:`1px solid ${C.border}`,fontSize:11,color:C.muted,fontWeight:700,letterSpacing:'0.06em',textTransform:'uppercase'}}>Saved Dates</div>
-                              {savedDates.map(d=>(
-                                <div key={d} onClick={()=>recallSnapshot(d)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'9px 14px',cursor:'pointer',fontSize:13,color:d===recallDate?C.blue:C.textDim,background:d===recallDate?C.blueDim:'transparent'}}
-                                  onMouseEnter={e=>{if(d!==recallDate)e.currentTarget.style.background=C.border;}}
-                                  onMouseLeave={e=>{if(d!==recallDate)e.currentTarget.style.background='transparent';}}>
-                                  <span>📅 {d}</span>
-                                  <span onClick={e=>deleteSnapshot(d,e)} style={{color:C.muted,fontSize:13,padding:'2px 5px'}}
-                                    onMouseEnter={e=>e.currentTarget.style.color=C.red} onMouseLeave={e=>e.currentTarget.style.color=C.muted}>🗑</span>
-                                </div>
-                              ))}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    )}
 
                     <button onClick={()=>downloadExcel(visible,visibleCompNames,today)} disabled={visible.length===0}
                       style={{display:'flex',alignItems:'center',gap:7,padding:'8px 16px',borderRadius:6,border:`1px solid ${C.accent}44`,background:C.accentDim,color:C.accent,fontWeight:700,fontSize:12,cursor:'pointer',whiteSpace:'nowrap',opacity:visible.length===0?0.4:1}}>
